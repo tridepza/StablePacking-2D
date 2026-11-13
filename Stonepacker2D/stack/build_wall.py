@@ -171,7 +171,7 @@ def build_wall_vendor(base, vendor, nb_stones_per_ite, allow_cutting = False,ref
                     get_main_logger().critical(f"Place stone {stone.id} at {trans_x},{trans_y}")
                     break
     sample_trial = 0
-    max_sample_trial = 5
+    max_sample_trial = 10
     while True:
         #_______________________________________________________________________________________SAMPLE
         if vendor_type == 'random':
@@ -617,6 +617,11 @@ def build_wall_vendor(base, vendor, nb_stones_per_ite, allow_cutting = False,ref
                 
 
                 adding_ok = base.add_stone(brick, [min_x, min_y])
+                if adding_ok:
+                    get_main_logger().critical(
+                        "Placed stone %s at step %s (x=%s, y=%s), score=%.4f",
+                        brick.id, construction_step_i, min_x, min_y, np.sum(features_best),
+                    )
                 _pre_label = brick.cluster
                 _new_nb_stones = len(base.placed_bricks)
                 if _new_nb_stones-_pre_nb_stones > 1:

@@ -1,17 +1,14 @@
-"""
-Main file for packing bricks.
+"""Pack a wall using the shapes and quantities configured in stone_types.
 
-Two packing examples can be performed:
-1. Packing bricks with length/height ratio 3;
-2. Packing bricks with length/height ratio 2.
-Switch between the two examples by commenting/uncommenting the corresponding lines (stone_file and label_value).
-
-The image of a unit brick is in the data folder.
+Each entry specifies a PNG in the data folder, its pixel label, and the
+number of copies to make available. Use one entry to pack a single shape.
 """
-import matplotlib
+import argparse
 import os
 import pathlib
 import datetime
+import random
+import matplotlib
 from skimage.measure import label
 from skimage.measure import regionprops
 import matplotlib.pyplot as plt
@@ -19,7 +16,7 @@ import numpy as np
 from Stonepacker2D import *
 
 
-def seed_everything(seed=20):
+def seed_everything(seed):
     """"
     Seed everything.
     """
@@ -28,12 +25,20 @@ def seed_everything(seed=20):
     np.random.seed(seed)
 
 
-seed_everything()
+parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
+parser.add_argument("--seed", type=int, help="Repeat a run with the same random seed.")
+# The Windows runner also passes its own compatibility options.
+args, _ = parser.parse_known_args()
+seed = args.seed if args.seed is not None else random.SystemRandom().getrandbits(32)
+if not 0 <= seed < 2**32:
+    parser.error("--seed must be between 0 and 4294967295")
+seed_everything(seed)
+print(f"Run seed: {seed}", flush=True)
 # ____________________________________________________________________________parameters
 # %%
 _root_dir = pathlib.Path(__file__).resolve().parent
 _root_dir = os.path.abspath(_root_dir)
-_rescale = 1
+_rescale = 0.35  # Fit the reference stone set to the packing grid.
 wall_width = 36*6#216
 wall_height = 36*6-12
 set_world_size(wall_width+2,wall_height+3)
@@ -51,29 +56,25 @@ time_stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 if not os.path.exists(_root_dir+'/result_'+time_stamp+'/'):
     os.mkdir(_root_dir+'/result_'+time_stamp+'/')
 
-# read stones
-stones = []
-"""
-Configuration for length ratio 3 brick
-"""
-stone_file = _root_dir+'/data/brick_36_12.png'
-label_value = 34
-"""
-Configuration for length ratio 2 brick
-"""
-# stone_file = _root_dir+'/data/brick_24_12.png'
-# label_value = 255
+# Each type has a filename, a pixel label, and an available quantity.
+copies_per_shape = 1
+stone_types = [
+    ("stones_reference_segmented.png", label_value, copies_per_shape)
+    for label_value in range(1, 68)
+]
 
+stones = []
 initial_rotation_angles = dict()  # positive clockwise
-for i in range(160):
-    stone = Stone()
-    if stone.from_labeled_img(label_value, stone_file, _rescale):
-        stone.id = i
+for filename, label_value, quantity in stone_types:
+    stone_file = os.path.join(_root_dir, "data", filename)
+    for _ in range(quantity):
+        stone = Stone()
+        if not stone.from_labeled_img(label_value, stone_file, _rescale):
+            raise ValueError(f"Could not load a stone with label {label_value} from {stone_file}")
+        stone.id = len(stones)
+        stone.cal_shape_factor()
         stones.append(stone)
         initial_rotation_angles[stone.id] = 0
-
-for i, stone in enumerate(stones):
-    stone.cal_shape_factor()
 
 # ______________________________WEIGHTS
 iw = 1
@@ -116,8 +117,7 @@ save_transformation_dir = get_dir()
 with open(save_transformation_dir+'transformation.txt', 'w+') as f:
     f.write("id;d_x;d_y;angle\n")
 for placed_stone in final_base.placed_rocks:
-    current_stone_matrix = np.where(final_base.id_matrix==placed_stone.id,1,0)
-    stone_prop = regionprops(current_stone_matrix.astype(np.uint8))
+    stone_prop = regionprops(placed_stone.matrix.astype(np.uint8))
     stone_center = stone_prop[0].centroid
     d_x = (stone_center[1])/_rescale
     d_y = (stone_center[0])/_rescale
@@ -140,10 +140,11 @@ white = np.array([255/256, 255/256, 255/256, 1])
 newcolors[:1, :] = white
 newcmp = ListedColormap(newcolors)
 
+plt.figure()
 plt.imshow(final_base.matrix, cmap=newcmp,interpolation='none')
-# plt.axis('off')
+plt.axis('off')
 text_kwargs = dict(ha='center', va='center',
-                    fontsize=10, color='black')
+                    fontsize=4, color='black')
 for i, stone_i in enumerate(final_base.placed_rocks):
 
     plt.text(final_base.rock_centers[i][0],
